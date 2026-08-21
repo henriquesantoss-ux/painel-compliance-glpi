@@ -33,9 +33,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
-# SISTEMA DE AUTENTICAÇÃO (TELA DE LOGIN COM FORM E ENTER)
+# SISTEMA DE AUTENTICAÇÃO (BUSCA EXCLUSIVAMENTE NO SECRETS)
 # -------------------------------------------------------------
-SENHA_CORRETA = "complianceadmin361"  # <--- Altere sua senha aqui!
+# Não existe NENHUMA senha salva no código. O Streamlit busca direto na nuvem.
+SENHA_CORRETA = st.secrets["SENHA_CORRETA"]
 
 def verificar_senha():
     if "autenticado" not in st.session_state:
@@ -67,9 +68,9 @@ if st.sidebar.button("🚪 Sair / Logoff"):
     st.rerun()
 
 # -------------------------------------------------------------
-# CONEXÃO COM O GOOGLE SHEETS
+# CONEXÃO COM O GOOGLE SHEETS (BUSCA EXCLUSIVAMENTE NO SECRETS)
 # -------------------------------------------------------------
-SPREADSHEET_ID = "1lSSTGEpf_DIz1SYEgFz3DOT_hgOcz32DzAU6XOTlIAo"
+SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 SHEET_NAME = "Base GLPI"
 
 url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(SHEET_NAME)}"
@@ -215,10 +216,9 @@ with col_graf1:
             yaxis=dict(showgrid=False, title=""),
             showlegend=False,
             height=220,
-            hovermode=False,  # Desativa o modo hover no layout
+            hovermode=False,
             margin=dict(l=10, r=40, t=10, b=10)
         )
-        # hovertemplate=None e hoverinfo='none' garantem a remocao total da caixinha
         fig_status.update_traces(textposition='outside', hovertemplate=None, hoverinfo='none', cliponaxis=False)
         
         evento_status = st.plotly_chart(
@@ -265,10 +265,9 @@ with col_graf2:
             yaxis=dict(showgrid=False, title="", categoryorder='total ascending'),
             showlegend=False,
             height=250,
-            hovermode=False,  # Desativa o modo hover no layout
+            hovermode=False,
             margin=dict(l=10, r=40, t=10, b=10)
         )
-        # hovertemplate=None e hoverinfo='none' garantem a remocao total da caixinha
         fig_titulos.update_traces(textposition='outside', hovertemplate=None, hoverinfo='none', cliponaxis=False)
         
         evento_categoria = st.plotly_chart(
