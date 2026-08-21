@@ -3,12 +3,8 @@ import pandas as pd
 import plotly.express as px
 from urllib.parse import quote
 
-# Configuração da Página
 st.set_page_config(page_title="Painel de Compliance - GLPI", layout="wide")
 
-# -------------------------------------------------------------
-# ESTILIZAÇÃO CSS DARK E REMOÇÃO DE INSTRUÇÕES DE INPUT
-# -------------------------------------------------------------
 st.markdown("""
     <style>
     .stApp {
@@ -25,38 +21,49 @@ st.markdown("""
         color: #888ea8;
         font-weight: 600;
     }
-    /* Oculta o texto "Press Enter to apply" dos campos de texto */
     div[data-testid="stInputInstructions"] {
         display: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# SISTEMA DE AUTENTICAÇÃO (BUSCA EXCLUSIVAMENTE NO SECRETS)
-# -------------------------------------------------------------
-# Não existe NENHUMA senha salva no código. O Streamlit busca direto na nuvem.
-SENHA_CORRETA = st.secrets["SENHA_CORRETA"]
+AUTH_TOKEN_HASH = st.secrets["AUTH_TOKEN_HASH"]
+DATA_PROVIDER_URI = st.secrets["DATA_PROVIDER_URI"]
+MAX_AUTH_RETRIES = 3
 
 def verificar_senha():
     if "autenticado" not in st.session_state:
         st.session_state["autenticado"] = False
+    if "tentativas" not in st.session_state:
+        st.session_state["tentativas"] = 0
 
     if not st.session_state["autenticado"]:
         st.markdown("<h2 style='text-align: center;'>🔒 Acesso Restrito - GLPI</h2>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col2:
+            if st.session_state["tentativas"] >= MAX_AUTH_RETRIES:
+                st.error("🚨 **Acesso Bloqueado!** Excesso de tentativas incorretas.")
+                st.warning("Atualize a página para tentar novamente.")
+                return False
+
             with st.form(key="form_login", clear_on_submit=False):
                 senha_digitada = st.text_input("Digite a senha de acesso:", type="password")
                 botao_entrar = st.form_submit_button("Entrar", use_container_width=True)
                 
                 if botao_entrar:
-                    if senha_digitada == SENHA_CORRETA:
+                    if senha_digitada == AUTH_TOKEN_HASH:
                         st.session_state["autenticado"] = True
+                        st.session_state["tentativas"] = 0
                         st.rerun()
                     else:
-                        st.error("🔑 Senha incorreta! Tente novamente.")
+                        st.session_state["tentativas"] += 1
+                        restantes = MAX_AUTH_RETRIES - st.session_state["tentativas"]
+                        
+                        if restantes > 0:
+                            st.error(f"🔑 Senha incorreta! Tentativas restantes: {restantes}")
+                        else:
+                            st.rerun()
         return False
     return True
 
@@ -65,15 +72,11 @@ if not verificar_senha():
 
 if st.sidebar.button("🚪 Sair / Logoff"):
     st.session_state["autenticado"] = False
+    st.session_state["tentativas"] = 0
     st.rerun()
 
-# -------------------------------------------------------------
-# CONEXÃO COM O GOOGLE SHEETS (BUSCA EXCLUSIVAMENTE NO SECRETS)
-# -------------------------------------------------------------
-SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 SHEET_NAME = "Base GLPI"
-
-url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(SHEET_NAME)}"
+url = f"https://docs.google.com/spreadsheets/d/{DATA_PROVIDER_URI}/gviz/tq?tqx=out:csv&sheet={quote(SHEET_NAME)}"
 
 @st.cache_data(ttl=60, show_spinner=False)
 def carregar_dados():
@@ -88,12 +91,9 @@ def carregar_dados():
 try:
     df = carregar_dados()
 except Exception as e:
-    st.error(f"Erro ao carregar os dados: {e}")
+    st.error("Erro ao carregar os dados.")
     st.stop()
 
-# -------------------------------------------------------------
-# ORDENAÇÃO CRONOLÓGICA DOS MESES
-# -------------------------------------------------------------
 ORDEM_MESES = [
     'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 
     'jul', 'ago', 'set', 'out', 'nov', 'dez'
@@ -113,9 +113,6 @@ def obter_chave_ordenacao(mes_str):
 meses_brutos = df['Mês'].dropna().unique().tolist() if 'Mês' in df.columns else []
 meses_unicos = sorted(meses_brutos, key=obter_chave_ordenacao)
 
-# -------------------------------------------------------------
-# FUNÇÃO MODAL (POP-UP DE DETALHES)
-# -------------------------------------------------------------
 @st.dialog("📋 Lista Detalhada de Chamados", width="large")
 def abrir_modal_detalhes():
     filtro_nome = st.session_state.get("modal_filtro", "")
@@ -132,9 +129,6 @@ def abrir_modal_detalhes():
     st.write(f"Exibindo **{len(df_dados)}** chamados registrados:")
     st.dataframe(df_dados[cols_existentes], use_container_width=True, hide_index=True)
 
-# -------------------------------------------------------------
-# CABEÇALHO E SELETOR DE MÊS
-# -------------------------------------------------------------
 st.title("Painel de Compliance - GLPI")
 
 opcoes_periodo = ["Total"] + meses_unicos
@@ -159,9 +153,6 @@ else:
 st.caption(f"Exibindo: **{label_periodo}**")
 st.markdown("---")
 
-# -------------------------------------------------------------
-# CÁLCULO DOS KPIS
-# -------------------------------------------------------------
 total_chamados = len(df_filtrado)
 
 dias_validos = df_filtrado['Dias Numéricos'].dropna() if 'Dias Numéricos' in df_filtrado.columns else pd.Series()
@@ -182,12 +173,8 @@ with col_kpi2:
 
 st.write("")
 
-# -------------------------------------------------------------
-# GRÁFICOS CLEAN COM PERCENTUAIS (HOVER 100% DESATIVADO)
-# -------------------------------------------------------------
 col_graf1, col_graf2 = st.columns(2)
 
-# Gráfico 1: Status dos Chamados
 with col_graf1:
     st.subheader("Status dos Chamados")
     if 'Status V2' in df_filtrado.columns and not df_filtrado.empty:
@@ -237,7 +224,6 @@ with col_graf1:
                 st.session_state["modal_dados"] = df_filtrado[df_filtrado['Status V2'] == pontos[0]["y"]]
                 st.session_state["abrir_dialog"] = True
 
-# Gráfico 2: Categorias das Solicitações
 with col_graf2:
     st.subheader("Categorias das Solicitações")
     if 'Título' in df_filtrado.columns and not df_filtrado.empty:
@@ -286,7 +272,6 @@ with col_graf2:
                 st.session_state["modal_dados"] = df_filtrado[df_filtrado['Título'] == pontos_cat[0]["y"]]
                 st.session_state["abrir_dialog"] = True
 
-# Dispara o modal caso a flag de abertura esteja ativa
 if st.session_state.get("abrir_dialog", False):
     st.session_state["abrir_dialog"] = False
     abrir_modal_detalhes()
